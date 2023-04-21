@@ -155,7 +155,7 @@ def gen_analytic_policy_active(default_run):
     #Try with two epsilon settings and 10 different random seeds.
     #epsilon_maxes = [0, 0.05, 0.1, 0.25, 0.5]
     
-    a_policy_active_list = [True]
+    a_policy_active_list = [False, True]
     a_policy_chances = [0.3]
     random_seeds = rng.integers(low=0, high=9999, size=1)
     
@@ -191,7 +191,7 @@ def gen_analytic_policy_active(default_run):
     return new_experiment   
 
 
-def gen_a_stochastic_policy(default_run):
+def gen_epsilon_greedy_mix_experiment(default_run):
     #Description: Test epsilon setting 0 vs 50%
     #Try with two epsilon settings and 10 different random seeds.
     #epsilon_maxes = [0, 0.05, 0.1, 0.25, 0.5]
@@ -210,6 +210,7 @@ def gen_a_stochastic_policy(default_run):
     #plt.plot(q_prob_trajectory)
     #plt.show()
     
+    #-------------Design Policies-----------------------
     
     #Greedy Policy (Q_Learner)
     new_hp_struct['policy_objects'].append( {
@@ -225,8 +226,7 @@ def gen_a_stochastic_policy(default_run):
     
     hp_structs.append(copy.deepcopy(new_hp_struct))
     
-    #-----------------------------------------------
-    
+    #----------------Adjust Other Parameters-------------------------
     a_policy_chances = [0.3]
     random_seeds = rng.integers(low=0, high=9999, size=1)
     
@@ -261,6 +261,75 @@ def gen_a_stochastic_policy(default_run):
     print("Returning new experiment")
     return new_experiment   
 
+def gen_down_right_experiment(default_run):
+    #Description: Test epsilon setting 0 vs 50%
+    #Try with two epsilon settings and 10 different random seeds.
+    #epsilon_maxes = [0, 0.05, 0.1, 0.25, 0.5]
+    
+    #Generate different hyperpolicy infos to test.
+    hp_structs = []
+    
+    #---------Prep Action Level Stochastic HP Info--------------
+    new_hp_struct = {'policy_objects': []}
+    #run['min_epsilon']
+    #Generate Policy Trajectories    
+    r_prob_trajectory = [max(default_run['max_epsilon']*((1-default_run['epsilon_decay'])**e), default_run['min_epsilon']) for e in range(0, default_run['n_episodes'])]
+    q_prob_trajectory = [(1-r_prob_trajectory[x]) for x in range(0, default_run['n_episodes'])]
+    
+    #plt.plot(r_prob_trajectory)
+    #plt.plot(q_prob_trajectory)
+    #plt.show()
+    
+    #-------------Design Policies-----------------------
+    
+    #Greedy Policy (Q_Learner)
+    new_hp_struct['policy_objects'].append( {
+    'policy_name': 'Q_Policy',
+    'prob_trajectory': q_prob_trajectory,
+    })
+    
+    #Random Policy
+    new_hp_struct['policy_objects'].append( {
+    'policy_name': 'Random_Policy',
+    'prob_trajectory': r_prob_trajectory,
+    })
+    
+    hp_structs.append(copy.deepcopy(new_hp_struct))
+    
+    #----------------Adjust Other Parameters-------------------------
+    a_policy_chances = [0.3]
+    random_seeds = rng.integers(low=0, high=9999, size=1)
+    
+    new_experiment = {'runs':[]}
+    new_experiment['generation_time']= time.time()
+    new_experiment['variables'] = ['hp_struct', 'analytic_policy_chance', 'np_seed']
+    
+    color_list = ['green', 'blue', 'red', 'yellow', 'orange', 'brown']
+    color_counter = 0
+    for hp_struct in hp_structs:
+        for policy_chance in a_policy_chances:
+            for seed in random_seeds:
+                new_run = copy.deepcopy(default_run)
+                
+                #Adjusted Settings
+                new_run['hp_struct'] = hp_struct
+                new_run['analytic_policy_chance'] = policy_chance
+                
+                #Standard Settings
+                new_run['np_seed'] = seed
+                new_run['env_seed'] = seed
+                new_run['python_seed'] = seed
+                new_run['color'] = color_list[color_counter]
+                new_run['label'] = " policy_chance: "+ str(policy_chance) +  " seed: " + str(seed)
+                
+                print("Settings: ", ": ", seed)
+                
+                #Add run to experiment
+                new_experiment['runs'].append(copy.deepcopy(new_run))
+            
+            color_counter += 1   
+    print("Returning new experiment")
+    return new_experiment
 #----------------------------------------------
 #----------------Generate The Experiment-------
 #----------------------------------------------
@@ -272,7 +341,9 @@ experiment = {'runs': []}
 
 if generate_mode:
     #Generate experiment
-    experiment = copy.deepcopy(gen_a_stochastic_policy(default_run))
+    experiment = copy.deepcopy(gen_analytic_policy_active(default_run))
+    #experiment = copy.deepcopy(gen_epsilon_greedy_mix_experiment(default_run))
+    #experiment = copy.deepcopy(gen_down_right_experiment(default_run))
 
     #Save experiment to folder
     experiment_name = str(experiment['generation_time']) + '.json'
@@ -296,16 +367,14 @@ for run in experiment['runs']:
     #Init the environment
     env = init_environment(run['env_config'])
 
-    #*******************************
-    #-----Init Policy Orc and the Desired Hyperpolicy------------
-    #********************************
+    #****************************************************************
+    #-----Init Policy Orc and the Desired Hyperpolicy----------------
+    #****************************************************************
     Orc = policy_lib.Orc(run, env)
 
     Orc.init_action_stochastic_hp(run['hp_struct'])
     
     
-
-
     #********************************
     #---------Init Graphics----------
     #********************************
@@ -319,15 +388,17 @@ for run in experiment['runs']:
     min_epsilon = run['min_epsilon']
     max_steps = run['max_steps']
     
-    #analytic_policy_active = run['analytic_policy_active']
-    #analytic_policy_chance = run['analytic_policy_chance']
+    analytic_policy_active = run['analytic_policy_active']
+    analytic_policy_chance = run['analytic_policy_chance']
     #default_policy = Q_policy
     
     
     #Initialize Result Structures.
     reward_per_episode = []
 
-
+    #********************************
+    #---------Run Loop---------------
+    #********************************
     for e in range(n_episodes):
         #------------Reset Environment--------------
         state = env.reset()
