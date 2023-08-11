@@ -5,7 +5,7 @@
 #**********************************
 import policy_lib               #Custom policies
 import numpy as np 
-rng = np.random.default_rng(12345)
+rng = np.random.default_rng(1234678) #12345 #Not thiss
 np.set_printoptions(suppress = True) 
 import seaborn as sns           #For plotting style
 import graph_plotter            #Custom visualizer
@@ -80,11 +80,16 @@ default_run = {}
 #---------Env Settings------------
 #Env Config
 default_run['env_config'] = {}
-default_run['env_config']['env_map'] = np.array([[0,0,0,0,0],
-                        [0,1,0,1,0],
-                        [0,0,0,1,0],
-                        [0,1,0,0,1],
-                        [0,0,1,0,0]])
+default_run['env_config']['env_map'] = np.array([[0,0,0,0,0,0,0,0,0],
+                                                [0,0,0,0,0,0,0,0,0],
+                                                [0,0,0,0,0,0,0,0,0],
+                                                [0,0,0,0,0,0,0,0,0],
+                                                [0,0,0,0,0,0,0,0,0],
+                                                [0,0,0,0,0,0,0,0,0],
+                                                [0,0,0,0,0,0,0,1,0],
+                                                [0,0,0,0,0,0,0,1,0],
+                                                [0,0,0,0,1,0,1,0,0]])
+                        
 #default_run['env_config']['env_name'] = 'FrozenLake-v1'
 default_run['env_config']['env_name'] = 'vector_grid_goal'                        
 default_run['env_config']['grid_dims'] = (len(default_run['env_config']['env_map'][0]),len(default_run['env_config']['env_map'][1]))
@@ -93,7 +98,7 @@ default_run['env_config']['goal_location'] = (default_run['env_config']['grid_di
 print(default_run['env_config']['grid_dims'] ,  default_run['env_config']['goal_location'])   
 
 #----------Stochastic Controls--------------
-default_run['seed'] = 6000
+default_run['seed'] = 6003 #This is controlling, fix to have other seed control
 
 #------------Training Loop Controls-----------
 default_run['n_episodes'] = 4000
@@ -120,7 +125,7 @@ default_run['hyperpolicy'] = 'a_stochastic'
 
 #-----------Q_Policy Control---------
 default_run['gamma'] = 0.9             #discount factor 0.9
-default_run['lr'] = 0.3                 #learning rate 0.1
+default_run['lr'] = 0.1                 #learning rate 0.1
 
 #-----------Random Policy Control---------------
 default_run['max_epsilon'] = 1              #initialize the exploration probability to 1
@@ -151,7 +156,8 @@ default_run['env_config']['env_name'] = 'vector_grid_goal'
 #--------------Adjust Parameters for Experiment---------------
 #*************************************************************
 def gen_analytic_policy_active(default_run):
-    #Description: Test epsilon setting 0 vs 50%
+    #Description: Test if analytic policy makes a difference
+    
     #Try with two epsilon settings and 10 different random seeds.
     #epsilon_maxes = [0, 0.05, 0.1, 0.25, 0.5]
     
@@ -175,6 +181,7 @@ def gen_analytic_policy_active(default_run):
                 new_run['analytic_policy_chance'] = policy_chance
                 
                 #Standard Settings
+                new_run['seed'] = int(seed)
                 new_run['np_seed'] = seed
                 new_run['env_seed'] = seed
                 new_run['python_seed'] = seed
@@ -191,15 +198,21 @@ def gen_analytic_policy_active(default_run):
     return new_experiment   
 
 
-def gen_epsilon_greedy_mix_experiment(default_run):
-    #Description: Test epsilon setting 0 vs 50%
+#Included in dissertation
+def gen_dr_vs_eg(default_run):
+    #Description: Test down right vs epsilon greedy policy
     #Try with two epsilon settings and 10 different random seeds.
     #epsilon_maxes = [0, 0.05, 0.1, 0.25, 0.5]
     
+    
+    #------------------------Generate HP Structs-------------------------------
     #Generate different hyperpolicy infos to test.
     hp_structs = []
     
-    #---------Prep Action Level Stochastic HP Info--------------
+    
+    #----------------------------------------------------------------------------
+    #-----------------------Epsilon Greedy Policy--------------------------------
+    #----------------------------------------------------------------------------
     new_hp_struct = {'policy_objects': []}
     #run['min_epsilon']
     #Generate Policy Trajectories    
@@ -222,13 +235,142 @@ def gen_epsilon_greedy_mix_experiment(default_run):
     new_hp_struct['policy_objects'].append( {
     'policy_name': 'Random_Policy',
     'prob_trajectory': r_prob_trajectory,
+    }) 
+    
+    hp_structs.append(copy.deepcopy(new_hp_struct))
+    
+    #----------------------------------------------------------------------------
+    #-----------------------Down Right Policy--------------------------------
+    #----------------------------------------------------------------------------
+    new_hp_struct = {'policy_objects': []}
+    #run['min_epsilon']
+    #Generate Policy Trajectories
+    r_prob_trajectory = [max(default_run['max_epsilon']*((1-default_run['epsilon_decay'])**e), default_run['min_epsilon']) for e in range(0, default_run['n_episodes'])]
+    q_prob_trajectory = [(1-r_prob_trajectory[x]) for x in range(0, default_run['n_episodes'])]
+    
+    
+    #Split between down right and random
+    percentage_dr = 0.5
+    dr_prob_trajectory = [percentage_dr*r_prob_trajectory[x] for x in range(0, default_run['n_episodes'])]
+    r_prob_trajectory = [(1-percentage_dr)*r_prob_trajectory[x] for x in range(0, default_run['n_episodes'])]
+    
+    #plt.plot(r_prob_trajectory)
+    #plt.plot(q_prob_trajectory)
+    #plt.plot(dr_prob_trajectory)
+    #plt.show()
+    
+    #-------------Design Policies-----------------------
+    
+    #Greedy Policy (Q_Learner)
+    new_hp_struct['policy_objects'].append( {
+    'policy_name': 'Q_Policy',
+    'prob_trajectory': q_prob_trajectory,
+    })
+    
+    #Random Policy
+    new_hp_struct['policy_objects'].append( {
+    'policy_name': 'Random_Policy',
+    'prob_trajectory': r_prob_trajectory,
+    })
+    
+    #Down Right Policy
+    new_hp_struct['policy_objects'].append( {
+    'policy_name': 'Down_Right_Policy',
+    'prob_trajectory': dr_prob_trajectory,
+    })  
+    
+    hp_structs.append(copy.deepcopy(new_hp_struct))
+    
+    
+    #----------------------------------------------------------------
+    #----------------Adjust Other Parameters-------------------------
+    #----------------------------------------------------------------
+    a_policy_chances = [0.3]
+    random_seeds = rng.integers(low=0, high=9999, size=10)
+    #Tried with 20 to same effect.
+    
+    new_experiment = {'runs':[]}
+    new_experiment['generation_time']= time.time()
+    new_experiment['variables'] = ['hp_struct', 'analytic_policy_chance', 'np_seed']
+    new_experiment['plot_title'] = 'Down Right Policy Vs Random Action'
+    
+    color_list = ['green', 'blue', 'red', 'yellow', 'orange', 'brown']
+    color_counter = 0
+    for hp_struct in hp_structs:
+        for policy_chance in a_policy_chances:
+            for seed in random_seeds:
+                new_run = copy.deepcopy(default_run)
+                
+                #Adjusted Settings
+                new_run['hp_struct'] = hp_struct
+                new_run['analytic_policy_chance'] = policy_chance
+                
+                #Standard Settings
+                new_run['seed'] = int(seed)
+                new_run['np_seed'] = seed
+                new_run['env_seed'] = seed
+                new_run['python_seed'] = seed
+                #new_run['color'] = color_list[color_counter]
+                new_run['run_type'] = color_counter
+                
+                #new_run['label'] = " policy_chance: "+ str(policy_chance)
+                
+                print(len(hp_struct['policy_objects']))
+                if len(hp_struct['policy_objects']) == 3:
+                    new_run['label'] = "Down Right Policy Included"
+                else:
+                    new_run['label'] = "Down Right Policy Not Included"
+                
+                print("Settings: ", ": ", seed)
+                
+                #Add run to experiment
+                new_experiment['runs'].append(copy.deepcopy(new_run))
+            
+            color_counter += 1   
+    print("Returning new experiment")
+    return new_experiment
+
+#---
+
+#Single Policy Experiments
+def gen_epsilon_greedy_mix_experiment(default_run):
+    #Description: Test epsilon setting 0 vs 50%
+    #Try with two epsilon settings and 10 different random seeds.
+    #epsilon_maxes = [0, 0.05, 0.1, 0.25, 0.5]
+    
+    #Generate different hyperpolicy infos to test.
+    hp_structs = []
+    
+    #---------Prep Action Level Stochastic HP Info--------------
+    new_hp_struct = {'policy_objects': []}
+    #run['min_epsilon']
+    #Generate Policy Trajectories    
+    r_prob_trajectory = [max(default_run['max_epsilon']*((1-default_run['epsilon_decay'])**e), default_run['min_epsilon']) for e in range(0, default_run['n_episodes'])]
+    q_prob_trajectory = [(1-r_prob_trajectory[x]) for x in range(0, default_run['n_episodes'])]
+    
+    plt.plot(r_prob_trajectory)
+    plt.plot(q_prob_trajectory)
+    plt.show()
+    
+    #-------------Design Policies-----------------------
+    
+    #Greedy Policy (Q_Learner)
+    new_hp_struct['policy_objects'].append( {
+    'policy_name': 'Q_Policy',
+    'prob_trajectory': q_prob_trajectory,
+    })
+    
+    #Random Policy
+    new_hp_struct['policy_objects'].append( {
+    'policy_name': 'Random_Policy',
+    'prob_trajectory': r_prob_trajectory,
     })
     
     hp_structs.append(copy.deepcopy(new_hp_struct))
     
     #----------------Adjust Other Parameters-------------------------
     a_policy_chances = [0.3]
-    random_seeds = rng.integers(low=0, high=9999, size=1)
+    random_seeds = rng.integers(low=0, high=9999, size=2)
     
     new_experiment = {'runs':[]}
     new_experiment['generation_time']= time.time()
@@ -246,6 +388,7 @@ def gen_epsilon_greedy_mix_experiment(default_run):
                 new_run['analytic_policy_chance'] = policy_chance
                 
                 #Standard Settings
+                new_run['seed'] = int(seed)
                 new_run['np_seed'] = seed
                 new_run['env_seed'] = seed
                 new_run['python_seed'] = seed
@@ -298,7 +441,7 @@ def gen_down_right_experiment(default_run):
     
     #----------------Adjust Other Parameters-------------------------
     a_policy_chances = [0.3]
-    random_seeds = rng.integers(low=0, high=9999, size=1)
+    random_seeds = rng.integers(low=0, high=9999, size=2)
     
     new_experiment = {'runs':[]}
     new_experiment['generation_time']= time.time()
@@ -316,6 +459,7 @@ def gen_down_right_experiment(default_run):
                 new_run['analytic_policy_chance'] = policy_chance
                 
                 #Standard Settings
+                new_run['seed'] = int(seed)
                 new_run['np_seed'] = seed
                 new_run['env_seed'] = seed
                 new_run['python_seed'] = seed
@@ -330,6 +474,9 @@ def gen_down_right_experiment(default_run):
             color_counter += 1   
     print("Returning new experiment")
     return new_experiment
+
+
+
 #----------------------------------------------
 #----------------Generate The Experiment-------
 #----------------------------------------------
@@ -341,9 +488,12 @@ experiment = {'runs': []}
 
 if generate_mode:
     #Generate experiment
-    experiment = copy.deepcopy(gen_analytic_policy_active(default_run))
+    #experiment = copy.deepcopy(gen_analytic_policy_active(default_run))
+    experiment = copy.deepcopy(gen_dr_vs_eg(default_run))    
     #experiment = copy.deepcopy(gen_epsilon_greedy_mix_experiment(default_run))
     #experiment = copy.deepcopy(gen_down_right_experiment(default_run))
+
+    
 
     #Save experiment to folder
     experiment_name = str(experiment['generation_time']) + '.json'
@@ -459,8 +609,8 @@ for run in experiment['runs']:
         #Decrease analytic solver chance
         #run['analytic_policy_chance'] = max(min_epsilon, np.exp(-epsilon_decay*e))
         
-        if e % 10 and e != 0:
-            #print("--------------Episode:", str(e), "-----------------")
+        if e % 500 == 0 and e != 0:
+            print("--------------Episode:", str(e), "-----------------")
             pass
         if run['visualizer'] and e% run['vis_frequency'] == 0 and e != 0:
             #Get greedy path
@@ -498,7 +648,9 @@ for run in experiment['runs']:
             
     #plt.plot(running_avg)
     '''
-    run['output_dict']['reward_per_episode'] = reward_per_episode
+    run['output_dict']['reward_per_episode'] = copy.deepcopy(reward_per_episode)
+    #print("Run results")
+    #print(reward_per_episode[0:100])
     
 
 #--------------------------------------------------------
